@@ -454,8 +454,7 @@ export default function PublishPage() {
       }
 
       // Upload metadata to IPFS
-      const metadataUpload = await pinata.upload.json(metadata)
-      const metadataCid = metadataUpload.IpfsHash
+      const metadataCid = await handlePinJSONToIPFS(metadata)
 
       setLaunchStatus('Preparing blockchain transaction...')
       setLaunchProgress(50)
@@ -542,6 +541,30 @@ export default function PublishPage() {
       setLaunchStatus('')
     }
   }
+
+  const handlePinJSONToIPFS = async (jsonData: object): Promise<string> => {
+  try {
+    const res = await fetch("https://api.pinata.cloud/pinning/pinJSONToIPFS", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.access_token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(jsonData),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Pinata JSON upload failed: ${res.statusText}`);
+    }
+
+    const result = await res.json();
+    return result.IpfsHash; // This is your metadata CID
+  } catch (error) {
+    console.error("Error uploading JSON to Pinata:", error);
+    throw new Error("Failed to upload JSON to IPFS");
+  }
+};
+
 
   return (
     <div className="min-h-screen bg-neutral-50">
