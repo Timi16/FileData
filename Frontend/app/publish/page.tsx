@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Upload, FileText, DollarSign, Zap, CheckCircle, ArrowRight, ArrowLeft, Database, Shield, Globe, X, File } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
+import { useDatasetStore } from '@/lib/store'
+import { toast } from 'sonner'
 
 const STEPS = [
   { id: 1, title: 'Upload & Preview', icon: Upload },
@@ -35,9 +38,12 @@ interface UploadedFile {
 }
 
 export default function PublishPage() {
+  const router = useRouter()
+  const { addDataset } = useDatasetStore()
   const [currentStep, setCurrentStep] = useState(1)
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [isDragging, setIsDragging] = useState(false)
+  const [isLaunching, setIsLaunching] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [formData, setFormData] = useState({
     title: '',
@@ -157,6 +163,77 @@ export default function PublishPage() {
         return '📝'
       default:
         return '📁'
+    }
+  }
+
+  const getFileFormat = () => {
+    const extensions = uploadedFiles.map(f => {
+      const ext = f.file.name.split('.').pop()?.toUpperCase()
+      return ext
+    }).filter(Boolean)
+    return [...new Set(extensions)].join(', ')
+  }
+
+  const getTotalSize = () => {
+    return formatFileSize(uploadedFiles.reduce((acc, f) => acc + f.file.size, 0))
+  }
+
+  const generateSampleData = () => {
+    // Generate sample data based on file types
+    const csvFiles = uploadedFiles.filter(f => f.file.name.endsWith('.csv'))
+    if (csvFiles.length > 0) {
+      return [
+        { id: 1, timestamp: '2024-01-01T00:00:00Z', value: Math.random() * 100, category: 'A' },
+        { id: 2, timestamp: '2024-01-01T01:00:00Z', value: Math.random() * 100, category: 'B' },
+        { id: 3, timestamp: '2024-01-01T02:00:00Z', value: Math.random() * 100, category: 'C' }
+      ]
+    }
+    return []
+  }
+
+  const handleLaunchDataset = async () => {
+    setIsLaunching(true)
+
+    try {
+      // Simulate launch process
+      await new Promise(resolve => setTimeout(resolve, 2000))
+
+      // Create dataset object
+      const newDatasetId = addDataset({
+        title: formData.title || 'Untitled Dataset',
+        description: formData.description || 'No description provided',
+        provider: 'You', // In a real app, this would be the current user
+        price: parseFloat(formData.price) || 0,
+        tags: formData.tags,
+        quality: Math.floor(Math.random() * 20) + 80, // Random quality between 80-100
+        size: getTotalSize(),
+        license: formData.license || 'Not specified',
+        format: getFileFormat(),
+        updateFrequency: 'Manual',
+        coverage: 'Custom',
+        domain: formData.domain || 'General',
+        files: uploadedFiles.map(f => ({
+          name: f.file.name,
+          size: f.file.size,
+          type: f.file.name.split('.').pop()?.toLowerCase() || 'unknown'
+        })),
+        sampleData: generateSampleData()
+      })
+
+      // Show success message
+      toast.success('Dataset launched successfully!', {
+        description: 'Your dataset is now live on the marketplace'
+      })
+
+      // Redirect to the new dataset page
+      router.push(`/discover/${newDatasetId}`)
+
+    } catch (error) {
+      toast.error('Failed to launch dataset', {
+        description: 'Please try again later'
+      })
+    } finally {
+      setIsLaunching(false)
     }
   }
 
@@ -530,7 +607,7 @@ export default function PublishPage() {
                           </div>
                           <div className="flex justify-between">
                             <span className="text-neutral-600">Total Size:</span>
-                            <span>{formatFileSize(uploadedFiles.reduce((acc, f) => acc + f.file.size, 0))}</span>
+                            <span>{getTotalSize()}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-neutral-600">Domain:</span>
@@ -570,9 +647,23 @@ export default function PublishPage() {
                   </div>
 
                   <div className="text-center">
-                    <Button size="lg" className="bg-primary hover:bg-primary/90 px-8">
-                      <Database className="w-5 h-5 mr-2" />
-                      Launch Dataset
+                    <Button
+                      size="lg"
+                      className="bg-primary hover:bg-primary/90 px-8"
+                      onClick={handleLaunchDataset}
+                      disabled={isLaunching}
+                    >
+                      {isLaunching ? (
+                        <>
+                          <div className="w-5 h-5 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                          Launching...
+                        </>
+                      ) : (
+                        <>
+                          <Database className="w-5 h-5 mr-2" />
+                          Launch Dataset
+                        </>
+                      )}
                     </Button>
                     <p className="text-sm text-neutral-600 mt-2">
                       By launching, you agree to our Terms of Service and Data Policy

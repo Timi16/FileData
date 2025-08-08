@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Star, Download, Eye, Coins, Calendar, Database, Shield, Globe, Copy, ExternalLink, Play, Pause, Brain, BarChart3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -11,42 +11,38 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-
-// Mock dataset data
-const DATASET = {
-  id: '1',
-  title: 'Global Climate Data 2024',
-  description: 'Comprehensive climate measurements from 10,000+ weather stations worldwide, updated daily with temperature, humidity, and precipitation data. This dataset includes historical records dating back to 1950 and real-time updates from IoT sensors deployed across six continents.',
-  provider: 'ClimateDAO',
-  providerVerified: true,
-  price: 45,
-  rating: 4.8,
-  reviews: 234,
-  downloads: 12847,
-  views: 45231,
-  tags: ['Climate', 'Weather', 'IoT', 'Time Series', 'Real-time', 'Historical'],
-  quality: 95,
-  size: '2.3 TB',
-  lastUpdated: '2 hours ago',
-  created: 'March 15, 2024',
-  license: 'CC BY 4.0',
-  format: 'CSV, JSON, Parquet',
-  updateFrequency: 'Daily',
-  coverage: 'Global',
-  sampleData: [
-    { station_id: 'US001', timestamp: '2024-01-01T00:00:00Z', temperature: 15.2, humidity: 68, precipitation: 0.0 },
-    { station_id: 'EU045', timestamp: '2024-01-01T00:00:00Z', temperature: 8.7, humidity: 82, precipitation: 2.3 },
-    { station_id: 'AS123', timestamp: '2024-01-01T00:00:00Z', temperature: 28.1, humidity: 45, precipitation: 0.0 }
-  ]
-}
+import { useDatasetStore } from '@/lib/store'
 
 export default function DatasetDetailPage() {
   const params = useParams()
+  const { getDatasetById } = useDatasetStore()
+  const [dataset, setDataset] = useState<any>(null)
   const [selectedDuration, setSelectedDuration] = useState('1')
   const [accessDuration, setAccessDuration] = useState([1])
   const [showPurchaseModal, setShowPurchaseModal] = useState(false)
 
-  const totalPrice = DATASET.price * accessDuration[0]
+  useEffect(() => {
+    if (params.id) {
+      const foundDataset = getDatasetById(params.id as string)
+      setDataset(foundDataset)
+    }
+  }, [params.id, getDatasetById])
+
+  if (!dataset) {
+    return (
+      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-neutral-900 mb-2">Dataset not found</h1>
+          <p className="text-neutral-600 mb-4">The dataset you're looking for doesn't exist.</p>
+          <Button asChild>
+            <Link href="/discover">Back to Discover</Link>
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  const totalPrice = dataset.price * accessDuration[0]
 
   return (
     <div className="min-h-screen bg-neutral-50">
@@ -80,26 +76,26 @@ export default function DatasetDetailPage() {
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
                       <h1 className="text-3xl font-bold text-neutral-900 mb-2">
-                        {DATASET.title}
+                        {dataset.title}
                       </h1>
                       <div className="flex items-center space-x-4 text-sm text-neutral-600 mb-4">
                         <div className="flex items-center space-x-1">
                           <span>by</span>
-                          <span className="font-medium text-primary">{DATASET.provider}</span>
-                          {DATASET.providerVerified && (
+                          <span className="font-medium text-primary">{dataset.provider}</span>
+                          {dataset.providerVerified && (
                             <Shield className="w-4 h-4 text-green-600" />
                           )}
                         </div>
                         <div className="flex items-center space-x-1">
                           <Star className="w-4 h-4 fill-secondary text-secondary" />
-                          <span>{DATASET.rating}</span>
-                          <span>({DATASET.reviews} reviews)</span>
+                          <span>{dataset.rating || 'New'}</span>
+                          {dataset.reviews > 0 && <span>({dataset.reviews} reviews)</span>}
                         </div>
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="text-2xl font-bold text-primary mb-1">
-                        {DATASET.price} FIL
+                        {dataset.price} FIL
                       </div>
                       <div className="text-sm text-neutral-600">per month</div>
                     </div>
@@ -107,7 +103,7 @@ export default function DatasetDetailPage() {
 
                   {/* Tags */}
                   <div className="flex flex-wrap gap-2 mb-6">
-                    {DATASET.tags.map((tag) => (
+                    {dataset.tags.map((tag: string) => (
                       <Badge key={tag} variant="secondary" className="bg-neutral-100 text-neutral-700">
                         {tag}
                       </Badge>
@@ -118,22 +114,22 @@ export default function DatasetDetailPage() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                     <div className="text-center p-3 bg-neutral-50 rounded-lg">
                       <Eye className="w-5 h-5 text-neutral-600 mx-auto mb-1" />
-                      <div className="font-semibold">{DATASET.views.toLocaleString()}</div>
+                      <div className="font-semibold">{dataset.views.toLocaleString()}</div>
                       <div className="text-xs text-neutral-600">Views</div>
                     </div>
                     <div className="text-center p-3 bg-neutral-50 rounded-lg">
                       <Download className="w-5 h-5 text-neutral-600 mx-auto mb-1" />
-                      <div className="font-semibold">{DATASET.downloads.toLocaleString()}</div>
+                      <div className="font-semibold">{dataset.downloads.toLocaleString()}</div>
                       <div className="text-xs text-neutral-600">Downloads</div>
                     </div>
                     <div className="text-center p-3 bg-neutral-50 rounded-lg">
                       <Database className="w-5 h-5 text-neutral-600 mx-auto mb-1" />
-                      <div className="font-semibold">{DATASET.size}</div>
+                      <div className="font-semibold">{dataset.size}</div>
                       <div className="text-xs text-neutral-600">Size</div>
                     </div>
                     <div className="text-center p-3 bg-neutral-50 rounded-lg">
                       <Calendar className="w-5 h-5 text-neutral-600 mx-auto mb-1" />
-                      <div className="font-semibold">{DATASET.updateFrequency}</div>
+                      <div className="font-semibold">{dataset.updateFrequency}</div>
                       <div className="text-xs text-neutral-600">Updates</div>
                     </div>
                   </div>
@@ -142,18 +138,18 @@ export default function DatasetDetailPage() {
                   <div className="mb-6">
                     <div className="flex items-center justify-between text-sm text-neutral-600 mb-2">
                       <span>Quality Score</span>
-                      <span className="font-semibold">{DATASET.quality}%</span>
+                      <span className="font-semibold">{dataset.quality}%</span>
                     </div>
                     <div className="w-full bg-neutral-200 rounded-full h-3">
-                      <div 
+                      <div
                         className="bg-gradient-to-r from-accent to-secondary h-3 rounded-full transition-all duration-500"
-                        style={{ width: `${DATASET.quality}%` }}
+                        style={{ width: `${dataset.quality}%` }}
                       />
                     </div>
                   </div>
 
                   <p className="text-neutral-700 leading-relaxed mb-6">
-                    {DATASET.description}
+                    {dataset.description}
                   </p>
 
                   {/* Action Buttons */}
@@ -205,30 +201,38 @@ export default function DatasetDetailPage() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-neutral-200">
-                              <th className="text-left p-2 font-medium">Station ID</th>
-                              <th className="text-left p-2 font-medium">Timestamp</th>
-                              <th className="text-left p-2 font-medium">Temperature (°C)</th>
-                              <th className="text-left p-2 font-medium">Humidity (%)</th>
-                              <th className="text-left p-2 font-medium">Precipitation (mm)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {DATASET.sampleData.map((row, index) => (
-                              <tr key={index} className="border-b border-neutral-100">
-                                <td className="p-2 font-mono">{row.station_id}</td>
-                                <td className="p-2 font-mono">{row.timestamp}</td>
-                                <td className="p-2">{row.temperature}</td>
-                                <td className="p-2">{row.humidity}</td>
-                                <td className="p-2">{row.precipitation}</td>
+                      {dataset.sampleData && dataset.sampleData.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-neutral-200">
+                                {Object.keys(dataset.sampleData[0]).map((key) => (
+                                  <th key={key} className="text-left p-2 font-medium capitalize">
+                                    {key.replace('_', ' ')}
+                                  </th>
+                                ))}
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                            </thead>
+                            <tbody>
+                              {dataset.sampleData.map((row: any, index: number) => (
+                                <tr key={index} className="border-b border-neutral-100">
+                                  {Object.values(row).map((value: any, i: number) => (
+                                    <td key={i} className="p-2 font-mono">
+                                      {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <Database className="w-12 h-12 text-neutral-400 mx-auto mb-4" />
+                          <p className="text-neutral-600">No sample data available</p>
+                          <p className="text-sm text-neutral-500">Sample data will be generated after purchase</p>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </TabsContent>
@@ -241,28 +245,14 @@ export default function DatasetDetailPage() {
                     <CardContent>
                       <div className="space-y-4">
                         <div className="p-4 bg-neutral-50 rounded-lg">
-                          <h4 className="font-semibold mb-2">Fields (5)</h4>
+                          <h4 className="font-semibold mb-2">Files ({dataset.files.length})</h4>
                           <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                              <span className="font-mono">station_id</span>
-                              <span className="text-neutral-600">string</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="font-mono">timestamp</span>
-                              <span className="text-neutral-600">datetime</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="font-mono">temperature</span>
-                              <span className="text-neutral-600">float</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="font-mono">humidity</span>
-                              <span className="text-neutral-600">integer</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="font-mono">precipitation</span>
-                              <span className="text-neutral-600">float</span>
-                            </div>
+                            {dataset.files.map((file: any, index: number) => (
+                              <div key={index} className="flex justify-between">
+                                <span className="font-mono">{file.name}</span>
+                                <span className="text-neutral-600">{file.type.toUpperCase()}</span>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       </div>
@@ -280,7 +270,7 @@ export default function DatasetDetailPage() {
                         <div>
                           <h4 className="font-semibold mb-2">Base URL</h4>
                           <div className="p-3 bg-neutral-900 text-green-400 rounded-lg font-mono text-sm">
-                            https://api.fildata.io/v1/datasets/{DATASET.id}
+                            https://api.fildata.io/v1/datasets/{dataset.id}
                           </div>
                         </div>
                         <div>
@@ -300,20 +290,28 @@ export default function DatasetDetailPage() {
                       <CardTitle>Reviews & Ratings</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-4">
-                        <div className="flex items-center space-x-4 p-4 border border-neutral-200 rounded-lg">
-                          <div className="flex items-center space-x-1">
-                            {[...Array(5)].map((_, i) => (
-                              <Star key={i} className="w-4 h-4 fill-secondary text-secondary" />
-                            ))}
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-medium">Excellent data quality</p>
-                            <p className="text-sm text-neutral-600">Very comprehensive and well-structured climate data. Perfect for our ML models.</p>
-                            <p className="text-xs text-neutral-500 mt-1">by DataScientist_42 • 2 days ago</p>
+                      {dataset.reviews > 0 ? (
+                        <div className="space-y-4">
+                          <div className="flex items-center space-x-4 p-4 border border-neutral-200 rounded-lg">
+                            <div className="flex items-center space-x-1">
+                              {[...Array(5)].map((_, i) => (
+                                <Star key={i} className="w-4 h-4 fill-secondary text-secondary" />
+                              ))}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium">Great dataset!</p>
+                              <p className="text-sm text-neutral-600">Very useful for our research project.</p>
+                              <p className="text-xs text-neutral-500 mt-1">by User123 • 1 day ago</p>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <Star className="w-12 h-12 text-neutral-400 mx-auto mb-4" />
+                          <p className="text-neutral-600">No reviews yet</p>
+                          <p className="text-sm text-neutral-500">Be the first to review this dataset</p>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </TabsContent>
@@ -371,7 +369,7 @@ export default function DatasetDetailPage() {
                     </div>
                   </div>
 
-                  <Button 
+                  <Button
                     className="w-full bg-primary hover:bg-primary/90"
                     onClick={() => setShowPurchaseModal(true)}
                   >
@@ -398,23 +396,23 @@ export default function DatasetDetailPage() {
                 <CardContent className="space-y-3 text-sm">
                   <div className="flex justify-between">
                     <span className="text-neutral-600">Created:</span>
-                    <span>{DATASET.created}</span>
+                    <span>{dataset.created}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-neutral-600">Last Updated:</span>
-                    <span>{DATASET.lastUpdated}</span>
+                    <span>{dataset.lastUpdated}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-neutral-600">License:</span>
-                    <span>{DATASET.license}</span>
+                    <span>{dataset.license}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-neutral-600">Format:</span>
-                    <span>{DATASET.format}</span>
+                    <span>{dataset.format}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-neutral-600">Coverage:</span>
-                    <span>{DATASET.coverage}</span>
+                    <span>{dataset.coverage}</span>
                   </div>
                 </CardContent>
               </Card>
