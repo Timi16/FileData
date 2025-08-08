@@ -15,6 +15,176 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { useDatasetStore } from '@/lib/store'
 import { toast } from 'sonner'
+import { PinataSDK } from "pinata"
+import { ethers } from "ethers"
+
+// Pinata configuration - In production, use environment variables
+const pinata = new PinataSDK({
+  pinataJwt: process.env.access_token || "your-jwt-token",
+  pinataGateway: "gateway.pinata.cloud"
+})
+
+// Contract configuration
+const registryAddress = "0x9D7f74d0C41E726EC95884E0e97Fa6129e3b5E99"
+const registryABI = [
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "datasetId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "cid",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "metadataCid",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "provider",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "price",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "DatasetPublished",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "datasetCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "datasets",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "cid",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadataCid",
+        "type": "string"
+      },
+      {
+        "internalType": "address",
+        "name": "provider",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "price",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "isActive",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_datasetId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getDataset",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "cid",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "metadataCid",
+        "type": "string"
+      },
+      {
+        "internalType": "address",
+        "name": "provider",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "price",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "isActive",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "_cid",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_metadataCid",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_price",
+        "type": "uint256"
+      }
+    ],
+    "name": "publishDataset",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+]
 
 const STEPS = [
   { id: 1, title: 'Upload & Preview', icon: Upload },
@@ -35,6 +205,7 @@ interface UploadedFile {
   id: string
   progress: number
   status: 'uploading' | 'completed' | 'error'
+  ipfsHash?: string
 }
 
 export default function PublishPage() {
@@ -44,7 +215,10 @@ export default function PublishPage() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [isLaunching, setIsLaunching] = useState(false)
+  const [launchProgress, setLaunchProgress] = useState(0)
+  const [launchStatus, setLaunchStatus] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -79,10 +253,44 @@ export default function PublishPage() {
     return <CurrentIcon className="w-6 h-6 text-primary" />
   }
 
+  const handlePinataUpload = async (file: File): Promise<string> => {
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        // optional metadata & options
+        const metadata = JSON.stringify({ name: file.name });
+        formData.append("pinataMetadata", metadata);
+
+        const options = JSON.stringify({ cidVersion: 1 });
+        formData.append("pinataOptions", options);
+
+        // Upload to Pinata via REST API endpoint
+        const res = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.access_token}`, // JWT from Pinata dashboard
+          },
+          body: formData,
+        });
+
+        if (!res.ok) {
+          throw new Error(`Pinata upload failed: ${res.statusText}`);
+        }
+
+        const result = await res.json();
+        return result.IpfsHash; // CID from Pinata
+      } catch (error) {
+        console.error("Error uploading to Pinata:", error);
+        throw new Error("Failed to upload file to IPFS");
+      }
+    };
+
+
   const handleFileSelect = (files: FileList | null) => {
     if (!files) return
 
-    Array.from(files).forEach((file) => {
+    Array.from(files).forEach(async (file) => {
       const fileId = Math.random().toString(36).substr(2, 9)
       const newFile: UploadedFile = {
         file,
@@ -93,20 +301,24 @@ export default function PublishPage() {
 
       setUploadedFiles(prev => [...prev, newFile])
 
-      // Simulate file upload progress
-      const interval = setInterval(() => {
-        setUploadedFiles(prev => prev.map(f => {
-          if (f.id === fileId) {
-            const newProgress = f.progress + Math.random() * 15
-            if (newProgress >= 100) {
-              clearInterval(interval)
-              return { ...f, progress: 100, status: 'completed' }
-            }
-            return { ...f, progress: newProgress }
-          }
-          return f
-        }))
-      }, 200)
+      try {
+        // Upload to IPFS via Pinata
+        const ipfsHash = await handlePinataUpload(file)
+
+        // Update file with IPFS hash and completion status
+        setUploadedFiles(prev => prev.map(f =>
+          f.id === fileId
+            ? { ...f, progress: 100, status: 'completed', ipfsHash }
+            : f
+        ))
+      } catch (error) {
+        setUploadedFiles(prev => prev.map(f =>
+          f.id === fileId
+            ? { ...f, status: 'error' }
+            : f
+        ))
+        toast.error(`Failed to upload ${file.name}`)
+      }
     })
   }
 
@@ -179,7 +391,6 @@ export default function PublishPage() {
   }
 
   const generateSampleData = () => {
-    // Generate sample data based on file types
     const csvFiles = uploadedFiles.filter(f => f.file.name.endsWith('.csv'))
     if (csvFiles.length > 0) {
       return [
@@ -192,49 +403,143 @@ export default function PublishPage() {
   }
 
   const handleLaunchDataset = async () => {
+    if (uploadedFiles.length === 0) {
+      toast.error('Please upload at least one file')
+      return
+    }
+
+    const completedFiles = uploadedFiles.filter(f => f.status === 'completed')
+    if (completedFiles.length === 0) {
+      toast.error('Please wait for files to finish uploading')
+      return
+    }
+
     setIsLaunching(true)
+    setLaunchProgress(0)
 
     try {
-      // Simulate launch process
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      // Check if MetaMask is available
+      if (!window.ethereum) {
+        throw new Error('MetaMask is not installed. Please install MetaMask to continue.')
+      }
 
-      // Create dataset object
-      const newDatasetId = addDataset({
+      setLaunchStatus('Connecting to wallet...')
+      setLaunchProgress(10)
+
+      // Request account access
+      await window.ethereum.request({ method: 'eth_requestAccounts' })
+
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+
+      setLaunchStatus('Uploading metadata to IPFS...')
+      setLaunchProgress(30)
+
+      // Create metadata object
+      const metadata = {
         title: formData.title || 'Untitled Dataset',
         description: formData.description || 'No description provided',
-        provider: 'You', // In a real app, this would be the current user
+        domain: formData.domain || 'General',
+        fileType: formData.fileType || getFileFormat(),
+        tags: formData.tags,
+        license: formData.license || 'Not specified',
+        files: completedFiles.map(f => ({
+          name: f.file.name,
+          size: f.file.size,
+          type: f.file.name.split('.').pop()?.toLowerCase() || 'unknown',
+          ipfsHash: f.ipfsHash
+        })),
+        createdAt: new Date().toISOString(),
+        totalSize: getTotalSize()
+      }
+
+      // Upload metadata to IPFS
+      const metadataUpload = await pinata.upload.json(metadata)
+      const metadataCid = metadataUpload.IpfsHash
+
+      setLaunchStatus('Preparing blockchain transaction...')
+      setLaunchProgress(50)
+
+      // Use the first file's IPFS hash as the main dataset CID
+      const fileCid = completedFiles[0].ipfsHash!
+      const priceInWei = ethers.parseEther(formData.price || "0")
+
+      setLaunchStatus('Publishing to blockchain...')
+      setLaunchProgress(70)
+
+      // Create contract instance
+      const contract = new ethers.Contract(registryAddress, registryABI, signer)
+
+      // Publish dataset to blockchain
+      const tx = await contract.publishDataset(fileCid, metadataCid, priceInWei)
+
+      setLaunchStatus('Waiting for confirmation...')
+      setLaunchProgress(85)
+
+      // Wait for transaction confirmation
+      const receipt = await tx.wait()
+
+      setLaunchStatus('Finalizing...')
+      setLaunchProgress(95)
+
+      // Get the dataset count to determine the new dataset ID
+      const datasetCount = await contract.datasetCount()
+      const newDatasetId = datasetCount.toNumber()
+
+      // Add to local store for immediate UI update
+      const localDatasetId = addDataset({
+        title: formData.title || 'Untitled Dataset',
+        description: formData.description || 'No description provided',
+        provider: 'You',
         price: parseFloat(formData.price) || 0,
         tags: formData.tags,
-        quality: Math.floor(Math.random() * 20) + 80, // Random quality between 80-100
+        quality: Math.floor(Math.random() * 20) + 80,
         size: getTotalSize(),
         license: formData.license || 'Not specified',
         format: getFileFormat(),
         updateFrequency: 'Manual',
         coverage: 'Custom',
         domain: formData.domain || 'General',
-        files: uploadedFiles.map(f => ({
+        files: completedFiles.map(f => ({
           name: f.file.name,
           size: f.file.size,
           type: f.file.name.split('.').pop()?.toLowerCase() || 'unknown'
         })),
         sampleData: generateSampleData(),
-        providerVerified: false
+        providerVerified: false,
+        metadataHash: metadataCid,
+        blockchainId: newDatasetId
       })
 
-      // Show success message
-      toast.success('Dataset launched successfully!', {
-        description: 'Your dataset is now live on the marketplace'
+      setLaunchProgress(100)
+      setLaunchStatus('Complete!')
+
+      toast.success('Dataset published successfully!', {
+        description: `Transaction hash: ${receipt.transactionHash.slice(0, 10)}...`
       })
 
       // Redirect to the new dataset page
-      router.push(`/discover/${newDatasetId}`)
+      setTimeout(() => {
+        router.push(`/discover/${localDatasetId}`)
+      }, 1000)
 
-    } catch (error) {
-      toast.error('Failed to launch dataset', {
-        description: 'Please try again later'
-      })
+    } catch (error: any) {
+      console.error('Error publishing dataset:', error)
+
+      let errorMessage = 'Failed to publish dataset'
+      if (error.message.includes('MetaMask')) {
+        errorMessage = error.message
+      } else if (error.code === 4001) {
+        errorMessage = 'Transaction was rejected by user'
+      } else if (error.message.includes('insufficient funds')) {
+        errorMessage = 'Insufficient funds for transaction'
+      }
+
+      toast.error(errorMessage)
     } finally {
       setIsLaunching(false)
+      setLaunchProgress(0)
+      setLaunchStatus('')
     }
   }
 
@@ -252,8 +557,8 @@ export default function PublishPage() {
             Publish Your Dataset
           </h1>
           <p className="text-xl text-neutral-600 max-w-2xl mx-auto">
-            Share your data with the world and earn FIL tokens. Our AI will help optimize
-            your dataset for maximum discoverability and value.
+            Share your data with the world and earn FIL tokens. Your files will be stored on IPFS
+            and registered on the Filecoin blockchain for permanent, decentralized access.
           </p>
         </motion.div>
 
@@ -314,7 +619,6 @@ export default function PublishPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-
               {/* Step 1: Upload & Preview */}
               {currentStep === 1 && (
                 <div className="space-y-6">
@@ -337,12 +641,11 @@ export default function PublishPage() {
                       {isDragging ? 'Drop your files here' : 'Drop your files here or click to browse'}
                     </h3>
                     <p className="text-neutral-600 mb-4">
-                      Supports CSV, JSON, Parquet, Images, and more. Max file size: 10GB
+                      Files will be uploaded to IPFS automatically. Supports CSV, JSON, Parquet, Images, and more.
                     </p>
                     <Button className="bg-primary hover:bg-primary/90">
                       Choose Files
                     </Button>
-
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -380,23 +683,27 @@ export default function PublishPage() {
                                   </Button>
                                 </div>
                               </div>
-
                               {uploadedFile.status === 'uploading' && (
                                 <div className="space-y-1">
                                   <Progress value={uploadedFile.progress} className="h-1" />
                                   <p className="text-xs text-neutral-500">
-                                    Uploading... {Math.round(uploadedFile.progress)}%
+                                    Uploading to IPFS... {Math.round(uploadedFile.progress)}%
                                   </p>
                                 </div>
                               )}
-
                               {uploadedFile.status === 'completed' && (
-                                <div className="flex items-center space-x-1">
-                                  <CheckCircle className="w-3 h-3 text-green-600" />
-                                  <p className="text-xs text-green-600">Upload complete</p>
+                                <div className="space-y-1">
+                                  <div className="flex items-center space-x-1">
+                                    <CheckCircle className="w-3 h-3 text-green-600" />
+                                    <p className="text-xs text-green-600">Uploaded to IPFS</p>
+                                  </div>
+                                  {uploadedFile.ipfsHash && (
+                                    <p className="text-xs text-neutral-500 font-mono">
+                                      IPFS: {uploadedFile.ipfsHash.slice(0, 20)}...
+                                    </p>
+                                  )}
                                 </div>
                               )}
-
                               {uploadedFile.status === 'error' && (
                                 <p className="text-xs text-red-600">Upload failed</p>
                               )}
@@ -519,40 +826,41 @@ export default function PublishPage() {
                   <div className="bg-gradient-to-r from-primary/10 to-accent/10 rounded-lg p-6">
                     <div className="flex items-center space-x-3 mb-4">
                       <Zap className="w-6 h-6 text-primary" />
-                      <h3 className="text-lg font-semibold">AI Analysis Complete</h3>
+                      <h3 className="text-lg font-semibold">IPFS Upload Complete</h3>
                     </div>
                     <p className="text-neutral-700 mb-4">
-                      Our AI has analyzed your {uploadedFiles.length} uploaded file{uploadedFiles.length !== 1 ? 's' : ''} and generated optimized metadata to improve discoverability.
+                      Your {uploadedFiles.filter(f => f.status === 'completed').length} file{uploadedFiles.filter(f => f.status === 'completed').length !== 1 ? 's have' : ' has'} been successfully uploaded to IPFS and are ready for blockchain publication.
                     </p>
-
                     <div className="grid md:grid-cols-3 gap-4">
                       <div className="bg-white rounded-lg p-4">
-                        <div className="text-2xl font-bold text-primary mb-1">95%</div>
-                        <div className="text-sm text-neutral-600">Quality Score</div>
+                        <div className="text-2xl font-bold text-primary mb-1">
+                          {uploadedFiles.filter(f => f.status === 'completed').length}
+                        </div>
+                        <div className="text-sm text-neutral-600">Files on IPFS</div>
                       </div>
                       <div className="bg-white rounded-lg p-4">
-                        <div className="text-2xl font-bold text-accent mb-1">12</div>
-                        <div className="text-sm text-neutral-600">Auto Tags</div>
+                        <div className="text-2xl font-bold text-accent mb-1">{getTotalSize()}</div>
+                        <div className="text-sm text-neutral-600">Total Size</div>
                       </div>
                       <div className="bg-white rounded-lg p-4">
-                        <div className="text-2xl font-bold text-secondary mb-1">8.5</div>
-                        <div className="text-sm text-neutral-600">Market Score</div>
+                        <div className="text-2xl font-bold text-secondary mb-1">{getFileFormat()}</div>
+                        <div className="text-sm text-neutral-600">Format</div>
                       </div>
                     </div>
                   </div>
 
-                  {/* File Analysis */}
-                  {uploadedFiles.length > 0 && (
+                  {/* IPFS Hashes */}
+                  {uploadedFiles.filter(f => f.status === 'completed').length > 0 && (
                     <div>
-                      <h4 className="font-semibold mb-3">File Analysis Results</h4>
+                      <h4 className="font-semibold mb-3">IPFS Upload Results</h4>
                       <div className="space-y-3">
                         {uploadedFiles.filter(f => f.status === 'completed').map((file) => (
                           <div key={file.id} className="flex items-start space-x-3 p-3 bg-green-50 rounded-lg">
                             <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
-                            <div>
+                            <div className="flex-1">
                               <p className="font-medium text-green-900">{file.file.name}</p>
-                              <p className="text-sm text-green-700">
-                                File structure validated • {formatFileSize(file.file.size)} • Ready for publication
+                              <p className="text-sm text-green-700 font-mono">
+                                IPFS Hash: {file.ipfsHash}
                               </p>
                             </div>
                           </div>
@@ -562,20 +870,24 @@ export default function PublishPage() {
                   )}
 
                   <div>
-                    <h4 className="font-semibold mb-3">Suggested Improvements</h4>
+                    <h4 className="font-semibold mb-3">Blockchain Publication</h4>
                     <div className="space-y-3">
-                      <div className="flex items-start space-x-3 p-3 bg-green-50 rounded-lg">
-                        <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+                      <div className="flex items-start space-x-3 p-3 bg-blue-50 rounded-lg">
+                        <Database className="w-5 h-5 text-blue-600 mt-0.5" />
                         <div>
-                          <p className="font-medium text-green-900">Data format is optimal</p>
-                          <p className="text-sm text-green-700">Your file structure follows best practices</p>
+                          <p className="font-medium text-blue-900">Ready for blockchain publication</p>
+                          <p className="text-sm text-blue-700">
+                            Your dataset will be registered on the Filecoin blockchain with metadata stored on IPFS
+                          </p>
                         </div>
                       </div>
                       <div className="flex items-start space-x-3 p-3 bg-yellow-50 rounded-lg">
-                        <Zap className="w-5 h-5 text-yellow-600 mt-0.5" />
+                        <Shield className="w-5 h-5 text-yellow-600 mt-0.5" />
                         <div>
-                          <p className="font-medium text-yellow-900">Consider adding more tags</p>
-                          <p className="text-sm text-yellow-700">Adding "time-series" and "weather" tags could increase visibility by 23%</p>
+                          <p className="font-medium text-yellow-900">MetaMask required</p>
+                          <p className="text-sm text-yellow-700">
+                            Make sure you have MetaMask installed and connected to publish to the blockchain
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -589,7 +901,7 @@ export default function PublishPage() {
                   <div className="bg-gradient-to-r from-primary to-accent text-white rounded-lg p-6">
                     <h3 className="text-xl font-semibold mb-2">Ready to Launch!</h3>
                     <p className="text-white/90">
-                      Your {uploadedFiles.length} file{uploadedFiles.length !== 1 ? 's' : ''} will be stored on Filecoin and made available through IPFS for global access.
+                      Your {uploadedFiles.filter(f => f.status === 'completed').length} file{uploadedFiles.filter(f => f.status === 'completed').length !== 1 ? 's are' : ' is'} uploaded to IPFS and ready to be published on the Filecoin blockchain.
                     </p>
                   </div>
 
@@ -604,7 +916,7 @@ export default function PublishPage() {
                           </div>
                           <div className="flex justify-between">
                             <span className="text-neutral-600">Files:</span>
-                            <span>{uploadedFiles.length} file{uploadedFiles.length !== 1 ? 's' : ''}</span>
+                            <span>{uploadedFiles.filter(f => f.status === 'completed').length} file{uploadedFiles.filter(f => f.status === 'completed').length !== 1 ? 's' : ''}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-neutral-600">Total Size:</span>
@@ -628,46 +940,62 @@ export default function PublishPage() {
 
                     <Card>
                       <CardContent className="p-4">
-                        <h4 className="font-semibold mb-3">Estimated Earnings</h4>
+                        <h4 className="font-semibold mb-3">Blockchain Details</h4>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
-                            <span className="text-neutral-600">Monthly Revenue:</span>
-                            <span className="font-semibold">{(parseFloat(formData.price || '0') * 10).toFixed(2)} FIL</span>
+                            <span className="text-neutral-600">Network:</span>
+                            <span className="font-semibold">Filecoin</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-neutral-600">Platform Fee (5%):</span>
-                            <span>-{(parseFloat(formData.price || '0') * 10 * 0.05).toFixed(2)} FIL</span>
+                            <span className="text-neutral-600">Storage:</span>
+                            <span>IPFS + Filecoin</span>
                           </div>
-                          <div className="flex justify-between font-semibold">
-                            <span>Net Earnings:</span>
-                            <span className="text-primary">{(parseFloat(formData.price || '0') * 10 * 0.95).toFixed(2)} FIL</span>
+                          <div className="flex justify-between">
+                            <span className="text-neutral-600">Contract:</span>
+                            <span className="font-mono text-xs">{registryAddress.slice(0, 10)}...</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-neutral-600">Gas Fee:</span>
+                            <span>~0.001 FIL</span>
                           </div>
                         </div>
                       </CardContent>
                     </Card>
                   </div>
 
+                  {/* Launch Progress */}
+                  {isLaunching && (
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <div className="flex items-center space-x-3 mb-3">
+                        <div className="w-5 h-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                        <span className="font-medium text-blue-900">{launchStatus}</span>
+                      </div>
+                      <Progress value={launchProgress} className="h-2" />
+                      <p className="text-sm text-blue-700 mt-2">{launchProgress}% complete</p>
+                    </div>
+                  )}
+
                   <div className="text-center">
                     <Button
                       size="lg"
                       className="bg-primary hover:bg-primary/90 px-8"
                       onClick={handleLaunchDataset}
-                      disabled={isLaunching}
+                      disabled={isLaunching || uploadedFiles.filter(f => f.status === 'completed').length === 0}
                     >
                       {isLaunching ? (
                         <>
                           <div className="w-5 h-5 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                          Launching...
+                          Publishing...
                         </>
                       ) : (
                         <>
                           <Database className="w-5 h-5 mr-2" />
-                          Launch Dataset
+                          Publish to Blockchain
                         </>
                       )}
                     </Button>
                     <p className="text-sm text-neutral-600 mt-2">
-                      By launching, you agree to our Terms of Service and Data Policy
+                      By publishing, you agree to our Terms of Service and Data Policy
                     </p>
                   </div>
                 </div>
@@ -684,12 +1012,11 @@ export default function PublishPage() {
                   <ArrowLeft className="w-4 h-4" />
                   <span>Previous</span>
                 </Button>
-
                 {currentStep < 4 ? (
                   <Button
                     onClick={nextStep}
                     className="bg-primary hover:bg-primary/90 flex items-center space-x-2"
-                    disabled={currentStep === 1 && uploadedFiles.length === 0}
+                    disabled={currentStep === 1 && uploadedFiles.filter(f => f.status === 'completed').length === 0}
                   >
                     <span>Next</span>
                     <ArrowRight className="w-4 h-4" />
