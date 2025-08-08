@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Upload, FileText, DollarSign, Zap, CheckCircle, ArrowRight, ArrowLeft, Database, Shield, Globe } from 'lucide-react'
+import { Upload, FileText, DollarSign, Zap, CheckCircle, ArrowRight, ArrowLeft, Database, Shield, Globe, X, File } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 
 const STEPS = [
   { id: 1, title: 'Upload & Preview', icon: Upload },
@@ -20,14 +21,24 @@ const STEPS = [
 ]
 
 const DOMAINS = [
-  'Machine Learning', 'Finance', 'Healthcare', 'Climate', 'Social Media', 
+  'Machine Learning', 'Finance', 'Healthcare', 'Climate', 'Social Media',
   'IoT Sensors', 'Genomics', 'Transportation', 'Energy', 'Agriculture'
 ]
 
 const FILE_TYPES = ['CSV', 'JSON', 'Parquet', 'Images', 'Video', 'Audio', 'Text', 'Binary']
 
+interface UploadedFile {
+  file: File
+  id: string
+  progress: number
+  status: 'uploading' | 'completed' | 'error'
+}
+
 export default function PublishPage() {
   const [currentStep, setCurrentStep] = useState(1)
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -62,6 +73,93 @@ export default function PublishPage() {
     return <CurrentIcon className="w-6 h-6 text-primary" />
   }
 
+  const handleFileSelect = (files: FileList | null) => {
+    if (!files) return
+
+    Array.from(files).forEach((file) => {
+      const fileId = Math.random().toString(36).substr(2, 9)
+      const newFile: UploadedFile = {
+        file,
+        id: fileId,
+        progress: 0,
+        status: 'uploading'
+      }
+
+      setUploadedFiles(prev => [...prev, newFile])
+
+      // Simulate file upload progress
+      const interval = setInterval(() => {
+        setUploadedFiles(prev => prev.map(f => {
+          if (f.id === fileId) {
+            const newProgress = f.progress + Math.random() * 15
+            if (newProgress >= 100) {
+              clearInterval(interval)
+              return { ...f, progress: 100, status: 'completed' }
+            }
+            return { ...f, progress: newProgress }
+          }
+          return f
+        }))
+      }, 200)
+    })
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    handleFileSelect(e.dataTransfer.files)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const removeFile = (fileId: string) => {
+    setUploadedFiles(prev => prev.filter(f => f.id !== fileId))
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  const getFileIcon = (fileName: string) => {
+    const extension = fileName.split('.').pop()?.toLowerCase()
+    switch (extension) {
+      case 'csv':
+      case 'json':
+      case 'xml':
+        return '📊'
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+        return '🖼️'
+      case 'mp4':
+      case 'avi':
+      case 'mov':
+        return '🎥'
+      case 'mp3':
+      case 'wav':
+        return '🎵'
+      case 'pdf':
+        return '📄'
+      case 'txt':
+        return '📝'
+      default:
+        return '📁'
+    }
+  }
+
   return (
     <div className="min-h-screen bg-neutral-50">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -76,7 +174,7 @@ export default function PublishPage() {
             Publish Your Dataset
           </h1>
           <p className="text-xl text-neutral-600 max-w-2xl mx-auto">
-            Share your data with the world and earn FIL tokens. Our AI will help optimize 
+            Share your data with the world and earn FIL tokens. Our AI will help optimize
             your dataset for maximum discoverability and value.
           </p>
         </motion.div>
@@ -94,8 +192,8 @@ export default function PublishPage() {
               return (
                 <div key={step.id} className="flex items-center">
                   <div className={`flex items-center justify-center w-12 h-12 rounded-full border-2 transition-all duration-300 ${
-                    currentStep >= step.id 
-                      ? 'bg-primary border-primary text-white' 
+                    currentStep >= step.id
+                      ? 'bg-primary border-primary text-white'
                       : 'border-neutral-300 text-neutral-400'
                   }`}>
                     <StepIcon className="w-5 h-5" />
@@ -138,14 +236,27 @@ export default function PublishPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              
+
               {/* Step 1: Upload & Preview */}
               {currentStep === 1 && (
                 <div className="space-y-6">
-                  <div className="border-2 border-dashed border-neutral-300 rounded-lg p-12 text-center hover:border-primary/50 transition-colors cursor-pointer">
-                    <Upload className="w-12 h-12 text-neutral-400 mx-auto mb-4" />
+                  {/* File Upload Area */}
+                  <div
+                    className={`border-2 border-dashed rounded-lg p-12 text-center transition-all duration-300 cursor-pointer ${
+                      isDragging
+                        ? 'border-primary bg-primary/5'
+                        : 'border-neutral-300 hover:border-primary/50'
+                    }`}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className={`w-12 h-12 mx-auto mb-4 ${
+                      isDragging ? 'text-primary' : 'text-neutral-400'
+                    }`} />
                     <h3 className="text-lg font-semibold text-neutral-900 mb-2">
-                      Drop your files here or click to browse
+                      {isDragging ? 'Drop your files here' : 'Drop your files here or click to browse'}
                     </h3>
                     <p className="text-neutral-600 mb-4">
                       Supports CSV, JSON, Parquet, Images, and more. Max file size: 10GB
@@ -153,7 +264,70 @@ export default function PublishPage() {
                     <Button className="bg-primary hover:bg-primary/90">
                       Choose Files
                     </Button>
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => handleFileSelect(e.target.files)}
+                      accept=".csv,.json,.parquet,.jpg,.jpeg,.png,.gif,.mp4,.avi,.mov,.mp3,.wav,.pdf,.txt,.xml"
+                    />
                   </div>
+
+                  {/* Uploaded Files List */}
+                  {uploadedFiles.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-neutral-900">Uploaded Files ({uploadedFiles.length})</h4>
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {uploadedFiles.map((uploadedFile) => (
+                          <div key={uploadedFile.id} className="flex items-center space-x-3 p-3 bg-white border border-neutral-200 rounded-lg">
+                            <div className="text-2xl">{getFileIcon(uploadedFile.file.name)}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="text-sm font-medium text-neutral-900 truncate">
+                                  {uploadedFile.file.name}
+                                </p>
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-xs text-neutral-500">
+                                    {formatFileSize(uploadedFile.file.size)}
+                                  </span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeFile(uploadedFile.id)}
+                                    className="h-6 w-6 p-0 hover:bg-red-100 hover:text-red-600"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              </div>
+
+                              {uploadedFile.status === 'uploading' && (
+                                <div className="space-y-1">
+                                  <Progress value={uploadedFile.progress} className="h-1" />
+                                  <p className="text-xs text-neutral-500">
+                                    Uploading... {Math.round(uploadedFile.progress)}%
+                                  </p>
+                                </div>
+                              )}
+
+                              {uploadedFile.status === 'completed' && (
+                                <div className="flex items-center space-x-1">
+                                  <CheckCircle className="w-3 h-3 text-green-600" />
+                                  <p className="text-xs text-green-600">Upload complete</p>
+                                </div>
+                              )}
+
+                              {uploadedFile.status === 'error' && (
+                                <p className="text-xs text-red-600">Upload failed</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid md:grid-cols-2 gap-6">
                     <div>
@@ -270,9 +444,9 @@ export default function PublishPage() {
                       <h3 className="text-lg font-semibold">AI Analysis Complete</h3>
                     </div>
                     <p className="text-neutral-700 mb-4">
-                      Our AI has analyzed your dataset and generated optimized metadata to improve discoverability.
+                      Our AI has analyzed your {uploadedFiles.length} uploaded file{uploadedFiles.length !== 1 ? 's' : ''} and generated optimized metadata to improve discoverability.
                     </p>
-                    
+
                     <div className="grid md:grid-cols-3 gap-4">
                       <div className="bg-white rounded-lg p-4">
                         <div className="text-2xl font-bold text-primary mb-1">95%</div>
@@ -289,6 +463,26 @@ export default function PublishPage() {
                     </div>
                   </div>
 
+                  {/* File Analysis */}
+                  {uploadedFiles.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold mb-3">File Analysis Results</h4>
+                      <div className="space-y-3">
+                        {uploadedFiles.filter(f => f.status === 'completed').map((file) => (
+                          <div key={file.id} className="flex items-start space-x-3 p-3 bg-green-50 rounded-lg">
+                            <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+                            <div>
+                              <p className="font-medium text-green-900">{file.file.name}</p>
+                              <p className="text-sm text-green-700">
+                                File structure validated • {formatFileSize(file.file.size)} • Ready for publication
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <h4 className="font-semibold mb-3">Suggested Improvements</h4>
                     <div className="space-y-3">
@@ -296,7 +490,7 @@ export default function PublishPage() {
                         <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
                         <div>
                           <p className="font-medium text-green-900">Data format is optimal</p>
-                          <p className="text-sm text-green-700">Your CSV structure follows best practices</p>
+                          <p className="text-sm text-green-700">Your file structure follows best practices</p>
                         </div>
                       </div>
                       <div className="flex items-start space-x-3 p-3 bg-yellow-50 rounded-lg">
@@ -317,7 +511,7 @@ export default function PublishPage() {
                   <div className="bg-gradient-to-r from-primary to-accent text-white rounded-lg p-6">
                     <h3 className="text-xl font-semibold mb-2">Ready to Launch!</h3>
                     <p className="text-white/90">
-                      Your dataset will be stored on Filecoin and made available through IPFS for global access.
+                      Your {uploadedFiles.length} file{uploadedFiles.length !== 1 ? 's' : ''} will be stored on Filecoin and made available through IPFS for global access.
                     </p>
                   </div>
 
@@ -329,6 +523,14 @@ export default function PublishPage() {
                           <div className="flex justify-between">
                             <span className="text-neutral-600">Title:</span>
                             <span>{formData.title || 'Untitled Dataset'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-neutral-600">Files:</span>
+                            <span>{uploadedFiles.length} file{uploadedFiles.length !== 1 ? 's' : ''}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-neutral-600">Total Size:</span>
+                            <span>{formatFileSize(uploadedFiles.reduce((acc, f) => acc + f.file.size, 0))}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-neutral-600">Domain:</span>
@@ -395,6 +597,7 @@ export default function PublishPage() {
                   <Button
                     onClick={nextStep}
                     className="bg-primary hover:bg-primary/90 flex items-center space-x-2"
+                    disabled={currentStep === 1 && uploadedFiles.length === 0}
                   >
                     <span>Next</span>
                     <ArrowRight className="w-4 h-4" />
