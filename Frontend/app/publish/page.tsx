@@ -217,7 +217,8 @@ export default function PublishPage() {
           size: f.file.size,
           type: f.file.name.split('.').pop()?.toLowerCase() || 'unknown'
         })),
-        sampleData: generateSampleData()
+        sampleData: generateSampleData(),
+        providerVerified: false
       })
 
       // Show success message
