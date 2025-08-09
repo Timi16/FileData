@@ -20,8 +20,8 @@ import { ethers } from "ethers"
 
 // Pinata configuration - In production, use environment variables
 const pinata = new PinataSDK({
-  pinataJwt: process.env.access_token || "your-jwt-token",
-  pinataGateway: "gateway.pinata.cloud"
+  pinataJwt: process.env.JWT || "",
+  pinataGateway: "jade-obvious-goose-24.mypinata.cloud"
 })
 
 // Contract configuration
@@ -253,38 +253,31 @@ export default function PublishPage() {
     return <CurrentIcon className="w-6 h-6 text-primary" />
   }
 
-  const handlePinataUpload = async (file: File): Promise<string> => {
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
+    const handlePinataUpload = async (file: File): Promise<string> => {
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
 
-        // optional metadata & options
-        const metadata = JSON.stringify({ name: file.name });
-        formData.append("pinataMetadata", metadata);
+    // Call your Next.js API route instead of Pinata directly
+    const response = await fetch("/api/upload", {
+      method: "POST",
+      body: formData,
+    });
 
-        const options = JSON.stringify({ cidVersion: 1 });
-        formData.append("pinataOptions", options);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Upload failed: ${response.statusText}`);
+    }
 
-        // Upload to Pinata via REST API endpoint
-        const res = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${process.env.access_token}`, // JWT from Pinata dashboard
-          },
-          body: formData,
-        });
+    const result = await response.json();
+    console.log("Upload successful:", result);
 
-        if (!res.ok) {
-          throw new Error(`Pinata upload failed: ${res.statusText}`);
-        }
-
-        const result = await res.json();
-        return result.IpfsHash; // CID from Pinata
-      } catch (error) {
-        console.error("Error uploading to Pinata:", error);
-        throw new Error("Failed to upload file to IPFS");
-      }
-    };
+    return result.ipfsHash;
+  } catch (error) {
+    console.error("Error uploading to Pinata:", error);
+    throw new Error("Failed to upload file to IPFS");
+  }
+};
 
 
   const handleFileSelect = (files: FileList | null) => {
@@ -543,28 +536,27 @@ export default function PublishPage() {
   }
 
   const handlePinJSONToIPFS = async (jsonData: object): Promise<string> => {
-  try {
-    const res = await fetch("https://api.pinata.cloud/pinning/pinJSONToIPFS", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.access_token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(jsonData),
-    });
+    try {
+      const response = await fetch("/api/upload-json", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(jsonData),
+      });
 
-    if (!res.ok) {
-      throw new Error(`Pinata JSON upload failed: ${res.statusText}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `JSON upload failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      return result.ipfsHash;
+    } catch (error) {
+      console.error("Error uploading JSON to Pinata:", error);
+      throw new Error("Failed to upload JSON to IPFS");
     }
-
-    const result = await res.json();
-    return result.IpfsHash; // This is your metadata CID
-  } catch (error) {
-    console.error("Error uploading JSON to Pinata:", error);
-    throw new Error("Failed to upload JSON to IPFS");
-  }
-};
-
+  };
 
   return (
     <div className="min-h-screen bg-neutral-50">

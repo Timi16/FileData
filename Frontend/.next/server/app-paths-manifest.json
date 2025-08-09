@@ -1,3 +1,5 @@
 {
+  "/api/upload/route": "app/api/upload/route.js",
+  "/api/upload-json/route": "app/api/upload-json/route.js",
   "/publish/page": "app/publish/page.js"
 }
